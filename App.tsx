@@ -6,7 +6,6 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import ReactCrop, { type Crop, type PixelCrop } from 'react-image-crop';
-import 'react-image-crop/dist/ReactCrop.css';
 import { generateEditedImage, generateFilteredImage, generateAdjustedImage } from './services/geminiService';
 import { generateEditedImageWithFal, generateFilteredImageWithFal, generateAdjustedImageWithFal } from './services/falService';
 import Header from './components/Header';
