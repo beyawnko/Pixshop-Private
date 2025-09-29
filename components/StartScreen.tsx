@@ -41,7 +41,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onFileSelect }) => {
                 <UploadIcon className="w-6 h-6 mr-3 transition-transform duration-500 ease-in-out group-hover:rotate-[360deg] group-hover:scale-110" />
                 Upload an Image
             </label>
-            <input id="image-upload-start" type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
+            <input id="image-upload-start" type="file" className="hidden" accept="image/*" onChange={handleFileChange} multiple />
             <p className="text-sm text-gray-500">or drag and drop a file</p>
         </div>
 

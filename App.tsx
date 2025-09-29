@@ -13,7 +13,7 @@ import Spinner from './components/Spinner';
 import FilterPanel from './components/FilterPanel';
 import AdjustmentPanel from './components/AdjustmentPanel';
 import { CropPanel } from './components/CropPanel';
-import { UndoIcon, RedoIcon, EyeIcon } from './components/icons';
+import { UndoIcon, RedoIcon, EyeIcon, PlusIcon, CloseIcon } from './components/icons';
 import StartScreen from './components/StartScreen';
 import { ApiKeyModal } from './components/ApiKeyModal';
 
@@ -40,6 +40,7 @@ type Model = 'gemini' | 'fal';
 const App: React.FC = () => {
   const [history, setHistory] = useState<File[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [prompt, setPrompt] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +63,7 @@ const App: React.FC = () => {
 
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
   const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
+  const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
 
   // Effect to create and revoke object URLs safely for the current image
   useEffect(() => {
@@ -85,6 +87,22 @@ const App: React.FC = () => {
     }
   }, [originalImage]);
 
+  // Effect for reference image
+  useEffect(() => {
+    let url: string | null = null;
+    if (referenceImage) {
+      url = URL.createObjectURL(referenceImage);
+      setReferenceImageUrl(url);
+    } else {
+      setReferenceImageUrl(null);
+    }
+    return () => {
+      if (url) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, [referenceImage]);
+
 
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;
@@ -97,12 +115,23 @@ const App: React.FC = () => {
     // Reset transient states after an action
     setCrop(undefined);
     setCompletedCrop(undefined);
+    // After an edit, reference images are no longer relevant for the new state.
+    setReferenceImage(null);
   }, [history, historyIndex]);
 
-  const handleImageUpload = useCallback((file: File) => {
+  const handleImageUpload = useCallback((files: File[]) => {
+    if (files.length === 0) return;
     setError(null);
-    setHistory([file]);
+    const primaryImage = files[0];
+    const refImage = files.length > 1 ? files[1] : null;
+    if (files.length > 2) {
+        console.warn("More than 2 files uploaded. Only the first two (primary + one reference) will be used for Fal Qwen Edit.");
+    }
+
+
+    setHistory([primaryImage]);
     setHistoryIndex(0);
+    setReferenceImage(refImage);
     setEditHotspot(null);
     setDisplayHotspot(null);
     setActiveTab('retouch');
@@ -137,7 +166,7 @@ const App: React.FC = () => {
     try {
         const editedImageUrl = selectedModel === 'gemini'
           ? await generateEditedImage(currentImage, prompt, editHotspot!)
-          : await generateEditedImageWithFal(currentImage, prompt, falApiKey);
+          : await generateEditedImageWithFal(currentImage, referenceImage, prompt, falApiKey);
 
         if (selectedModel === 'fal') {
             const response = await fetch(editedImageUrl);
@@ -158,7 +187,7 @@ const App: React.FC = () => {
     } finally {
         setIsLoading(false);
     }
-  }, [currentImage, prompt, editHotspot, addImageToHistory, selectedModel, falApiKey]);
+  }, [currentImage, prompt, editHotspot, addImageToHistory, selectedModel, falApiKey, referenceImage]);
   
   const handleApplyFilter = useCallback(async (filterPrompt: string) => {
     if (!currentImage) {
@@ -284,6 +313,7 @@ const App: React.FC = () => {
       setHistoryIndex(historyIndex - 1);
       setEditHotspot(null);
       setDisplayHotspot(null);
+      setReferenceImage(null);
     }
   }, [canUndo, historyIndex]);
   
@@ -292,6 +322,7 @@ const App: React.FC = () => {
       setHistoryIndex(historyIndex + 1);
       setEditHotspot(null);
       setDisplayHotspot(null);
+      setReferenceImage(null);
     }
   }, [canRedo, historyIndex]);
 
@@ -301,6 +332,7 @@ const App: React.FC = () => {
       setError(null);
       setEditHotspot(null);
       setDisplayHotspot(null);
+      setReferenceImage(null);
     }
   }, [history]);
 
@@ -311,6 +343,7 @@ const App: React.FC = () => {
       setPrompt('');
       setEditHotspot(null);
       setDisplayHotspot(null);
+      setReferenceImage(null);
   }, []);
 
   const handleDownload = useCallback(() => {
@@ -326,9 +359,21 @@ const App: React.FC = () => {
   }, [currentImage]);
   
   const handleFileSelect = (files: FileList | null) => {
-    if (files && files[0]) {
-      handleImageUpload(files[0]);
+    if (files && files.length > 0) {
+      handleImageUpload(Array.from(files));
     }
+  };
+
+  const handleAddReferenceImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+        setReferenceImage(e.target.files[0]);
+    }
+    // Reset file input value to allow selecting the same file again
+    e.target.value = '';
+  };
+
+  const handleRemoveReferenceImage = () => {
+      setReferenceImage(null);
   };
 
   const handleImageClick = (e: React.MouseEvent<HTMLImageElement>) => {
@@ -455,6 +500,32 @@ const App: React.FC = () => {
             )}
         </div>
         
+        {selectedModel === 'fal' && currentImage && (
+          <div className="w-full max-w-4xl mx-auto flex flex-col items-center gap-3 mt-2 animate-fade-in">
+            <h3 className="text-sm font-semibold text-gray-400 self-start">Reference Image (1 supported)</h3>
+            <div className="w-full flex items-center gap-3 p-2 bg-gray-800/50 border border-gray-700 rounded-lg">
+              {referenceImageUrl ? (
+                <div className="relative group flex-shrink-0">
+                  <img src={referenceImageUrl} alt="Reference" className="w-24 h-24 object-cover rounded-md border border-gray-600" />
+                  <button 
+                    onClick={handleRemoveReferenceImage} 
+                    className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+                    aria-label="Remove reference image"
+                  >
+                    <CloseIcon className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <label htmlFor="add-reference-image" className="w-24 h-24 bg-transparent border-2 border-dashed border-gray-600 rounded-md flex items-center justify-center cursor-pointer hover:border-gray-500 hover:bg-white/5 transition-colors">
+                  <PlusIcon className="w-8 h-8 text-gray-500" />
+                  <span className="sr-only">Add reference image</span>
+                </label>
+              )}
+              <input id="add-reference-image" type="file" className="hidden" accept="image/*" onChange={handleAddReferenceImage} />
+            </div>
+          </div>
+        )}
+
         <div className="w-full bg-gray-800/80 border border-gray-700/80 rounded-lg p-2 flex items-center justify-center gap-2 backdrop-blur-sm">
             {(['retouch', 'crop', 'adjust', 'filters'] as Tab[]).map(tab => (
                  <button
@@ -477,7 +548,7 @@ const App: React.FC = () => {
                     <p className="text-md text-gray-400">
                       {selectedModel === 'gemini' 
                         ? (editHotspot ? 'Great! Now describe your localized edit below.' : 'Click an area on the image to make a precise edit.')
-                        : 'Describe the edit you want to apply to the entire image.'
+                        : 'Describe the edit. You can add a reference image for style or content transfer.'
                       }
                     </p>
                     <form onSubmit={(e) => { e.preventDefault(); handleGenerate(); }} className="w-full flex items-center gap-2">

@@ -20,24 +20,24 @@ const fileToDataUrl = (file: File): Promise<string> => {
 
 /**
  * Calls the Fal.ai Qwen Image Edit Plus API
- * @param {string} imageData - URL or base64 data URI of the image
+ * @param {string[]} imageDataUrls - Array of URLs or base64 data URIs of the images
  * @param {string} prompt - The prompt to generate the image with
  * @param {string} apiKey - Fal.ai API key for authentication
  * @param {string} context - Context string for logging/debugging
  * @returns {Promise<string>} URL of the generated image
  */
 const callFalApi = async (
-    imageData: string,
+    imageDataUrls: string[],
     prompt: string,
     apiKey: string,
     context: string
 ): Promise<string> => {
     console.log(`Calling Fal.ai for ${context} with prompt: ${prompt}`);
-    console.log(`Using image data: ${imageData.substring(0, 80)}...`);
+    console.log(`Using ${imageDataUrls.length} image(s).`);
     
     const requestBody = {
         prompt: prompt,
-        image_urls: [imageData], // Always use array format for URLs
+        image_urls: imageDataUrls, // Always use array format for URLs
         image_size: 'square_hd',
         num_inference_steps: 50,
         guidance_scale: 4,
@@ -51,7 +51,7 @@ const callFalApi = async (
     console.log('FAL API Request:', JSON.stringify({
         url: 'https://fal.run/fal-ai/qwen-image-edit-plus',
         method: 'POST',
-        body: { ...requestBody, image_urls: [`${imageData.substring(0, 80)}... (truncated)`] }
+        body: { ...requestBody, image_urls: requestBody.image_urls.map(url => `${url.substring(0, 80)}... (truncated)`) }
     }, null, 2));
 
     const response = await fetch('https://fal.run/fal-ai/qwen-image-edit-plus', {
@@ -127,12 +127,13 @@ const callFalApi = async (
 };
 
 export const generateEditedImageWithFal = async (
-    originalImage: File,
+    primaryImage: File,
+    referenceImage: File | null,
     userPrompt: string,
     apiKey: string
 ): Promise<string> => {
     // Validate inputs
-    if (!originalImage) {
+    if (!primaryImage) {
         throw new Error('Original image is required');
     }
     if (!userPrompt || !userPrompt.trim()) {
@@ -145,21 +146,34 @@ export const generateEditedImageWithFal = async (
         throw new Error('Prompt must be 800 characters or less');
     }
     
-    // Check file size (FAL has limits, data URI adds ~33% overhead)
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    if (originalImage.size > maxSize * 0.75) {
-        throw new Error('Image file is too large (max ~7.5MB for this method)');
+    const allImages = [primaryImage];
+    if (referenceImage) {
+        allImages.push(referenceImage);
     }
-    
-    // Check file type
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    if (!validTypes.includes(originalImage.type)) {
-        throw new Error(`Invalid image type: ${originalImage.type}. Supported: ${validTypes.join(', ')}`);
+
+    for (const image of allImages) {
+        // Check file size (FAL has limits, data URI adds ~33% overhead)
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        if (image.size > maxSize * 0.75) {
+            throw new Error(`Image file '${image.name}' is too large (max ~7.5MB for this method)`);
+        }
+        
+        // Check file type
+        const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+        if (!validTypes.includes(image.type)) {
+            throw new Error(`Invalid image type for '${image.name}': ${image.type}. Supported: ${validTypes.join(', ')}`);
+        }
+    }
+
+    // Build a more descriptive prompt for the AI to ensure it uses the reference images.
+    let promptWithInstructions = `Perform an edit on the primary image based on the following request: "${userPrompt}".`;
+    if (referenceImage) {
+        promptWithInstructions += " Use the additional provided image as a reference for style, content, or context for the edit.";
     }
     
     try {
-        const imageDataUrl = await fileToDataUrl(originalImage);
-        return callFalApi(imageDataUrl, userPrompt, apiKey, 'edit');
+        const imageDataUrls = await Promise.all(allImages.map(fileToDataUrl));
+        return callFalApi(imageDataUrls, promptWithInstructions, apiKey, 'edit');
     } catch (error) {
         console.error('FAL Edit Error:', error);
         throw error;
@@ -178,7 +192,7 @@ export const generateFilteredImageWithFal = async (
     
     const imageDataUrl = await fileToDataUrl(originalImage);
     const prompt = `Apply a stylistic filter to the entire image based on this request: "${filterPrompt}". Do not change the composition or content, only apply the style.`;
-    return callFalApi(imageDataUrl, prompt, apiKey, 'filter');
+    return callFalApi([imageDataUrl], prompt, apiKey, 'filter');
 };
 
 export const generateAdjustedImageWithFal = async (
@@ -193,5 +207,5 @@ export const generateAdjustedImageWithFal = async (
     
     const imageDataUrl = await fileToDataUrl(originalImage);
     const prompt = `Perform a natural, global adjustment to the entire image based on this request: "${adjustmentPrompt}".`;
-    return callFalApi(imageDataUrl, prompt, apiKey, 'adjustment');
+    return callFalApi([imageDataUrl], prompt, apiKey, 'adjustment');
 };
