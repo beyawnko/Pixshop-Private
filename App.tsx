@@ -12,10 +12,10 @@ import Header from './components/Header';
 import Spinner from './components/Spinner';
 import FilterPanel from './components/FilterPanel';
 import AdjustmentPanel from './components/AdjustmentPanel';
-import CropPanel from './components/CropPanel';
+import { CropPanel } from './components/CropPanel';
 import { UndoIcon, RedoIcon, EyeIcon } from './components/icons';
 import StartScreen from './components/StartScreen';
-import ApiKeyModal from './components/ApiKeyModal';
+import { ApiKeyModal } from './components/ApiKeyModal';
 
 // Helper to convert a data URL string to a File object
 const dataURLtoFile = (dataurl: string, filename: string): File => {
