@@ -3,55 +3,98 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import * as fal from '@fal-ai/client';
-
 const callFalApi = async (
-    imageFile: File,
+    imageUrl: string,
     prompt: string,
     apiKey: string,
     context: string
 ): Promise<string> => {
     console.log(`Calling Fal.ai for ${context} with prompt: ${prompt}`);
+    
+    const response = await fetch('https://fal.run/fal-ai/qwen-image-edit-plus', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Key ${apiKey}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            image_urls: [imageUrl],
+            prompt: prompt,
+            output_format: 'png',
+            enable_safety_checker: true
+        })
+    });
 
-    try {
-        // Upload image using the official Fal.ai client SDK
-        const uploadedFile = await fal.upload(imageFile, {
-            key: apiKey,
-        });
-        
-        const imageUrl = uploadedFile.url;
-        
-        // Call the Qwen model using the official Fal.ai client SDK
-        const result: any = await fal.run('fal-ai/qwen-image-edit-plus', {
-            key: apiKey,
-            input: {
-                image_urls: [imageUrl],
-                prompt: prompt,
-                output_format: 'png',
-                enable_safety_checker: false
+    if (!response.ok) {
+        let errorMessage = `Fal.ai API request failed with status ${response.status}`;
+        try {
+            const errorBody = await response.json();
+            if (errorBody.error) {
+                errorMessage += `: ${errorBody.error}`;
+            } else if (errorBody.detail) {
+                errorMessage += `: ${errorBody.detail}`;
             }
-        });
-
-        if (result.images && result.images.length > 0 && result.images[0].url) {
-            return result.images[0].url;
-        } else {
-            console.error(`Fal.ai API response did not contain an image for ${context}.`, { result });
-            throw new Error(`The Fal.ai model did not return an image for the ${context}.`);
+        } catch {
+            try {
+              const textError = await response.text();
+              if (textError) errorMessage += `: ${textError}`;
+            } catch {
+                // Ignore if text parsing also fails
+            }
         }
-    } catch (error) {
-        const message = error instanceof Error ? error.message : 'An unknown error occurred with Fal.ai';
-        // Sanitize API key from any error message
-        console.error(`Fal.ai process failed for ${context}:`, message.replace(apiKey, '[REDACTED]'));
-        throw new Error(message.replace(apiKey, '[REDACTED]'));
+        console.error(`Fal.ai API error for ${context}:`, errorMessage.replace(apiKey, '[REDACTED]'));
+        throw new Error(errorMessage.replace(apiKey, '[REDACTED]'));
+    }
+
+    const result: any = await response.json();
+
+    if (result.images && result.images.length > 0 && result.images[0].url) {
+        return result.images[0].url;
+    } else {
+        console.error(`Fal.ai API response did not contain an image for ${context}.`, { result });
+        throw new Error(`The Fal.ai model did not return an image for the ${context}.`);
     }
 };
+
+const uploadImageToFal = async (imageFile: File, apiKey: string): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', imageFile);
+
+    const uploadResponse = await fetch('https://fal.run/storage/upload', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Key ${apiKey}`,
+        },
+        body: formData
+    });
+
+    if (!uploadResponse.ok) {
+        let errorMessage = `Failed to upload image: ${uploadResponse.statusText}`;
+        try {
+            const errorBody = await uploadResponse.json();
+            if (errorBody.detail) {
+                 errorMessage += `: ${errorBody.detail}`;
+            }
+        } catch {
+            // Can't parse JSON, do nothing extra
+        }
+        throw new Error(errorMessage.replace(apiKey, '[REDACTED]'));
+    }
+
+    const uploadResult = await uploadResponse.json();
+    if (!uploadResult.url) {
+        throw new Error('Image upload to Fal.ai did not return a URL.');
+    }
+    return uploadResult.url;
+}
 
 export const generateEditedImageWithFal = async (
     originalImage: File,
     userPrompt: string,
     apiKey: string
 ): Promise<string> => {
-    return callFalApi(originalImage, userPrompt, apiKey, 'edit');
+    const imageUrl = await uploadImageToFal(originalImage, apiKey);
+    return callFalApi(imageUrl, userPrompt, apiKey, 'edit');
 };
 
 export const generateFilteredImageWithFal = async (
@@ -59,8 +102,9 @@ export const generateFilteredImageWithFal = async (
     filterPrompt: string,
     apiKey: string,
 ): Promise<string> => {
+    const imageUrl = await uploadImageToFal(originalImage, apiKey);
     const prompt = `Apply a stylistic filter to the entire image based on this request: "${filterPrompt}". Do not change the composition or content, only apply the style.`;
-    return callFalApi(originalImage, prompt, apiKey, 'filter');
+    return callFalApi(imageUrl, prompt, apiKey, 'filter');
 };
 
 export const generateAdjustedImageWithFal = async (
@@ -68,6 +112,7 @@ export const generateAdjustedImageWithFal = async (
     adjustmentPrompt: string,
     apiKey: string,
 ): Promise<string> => {
+    const imageUrl = await uploadImageToFal(originalImage, apiKey);
     const prompt = `Perform a natural, global adjustment to the entire image based on this request: "${adjustmentPrompt}".`;
-    return callFalApi(originalImage, prompt, apiKey, 'adjustment');
+    return callFalApi(imageUrl, prompt, apiKey, 'adjustment');
 };
