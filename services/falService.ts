@@ -28,7 +28,7 @@ const callFalApi = async (
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            image_url: imageUrl,
+            image_urls: [imageUrl],
             prompt: prompt,
         })
     });
