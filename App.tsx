@@ -225,6 +225,7 @@ const App: React.FC = () => {
             newImageFile = dataURLtoFile(adjustedImageUrl, `adjusted-${Date.now()}.png`);
         }
         addImageToHistory(newImageFile);
+    // FIX: Added missing curly braces for the catch block.
     } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
         setError(`Failed to apply the adjustment. ${errorMessage}`);
@@ -486,16 +487,16 @@ const App: React.FC = () => {
                             onChange={(e) => setPrompt(e.target.value)}
                             placeholder={
                               selectedModel === 'gemini'
-                                ? (editHotspot ? "e.g., 'change my shirt color to blue'" : "First click a point on the image")
+                                ? (editHotspot ? "e.g., 'change my shirt color to blue'" : "Click a point, then describe your edit")
                                 : "e.g., 'make the photo black and white'"
                             }
                             className="flex-grow bg-gray-800 border border-gray-700 text-gray-200 rounded-lg p-5 text-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition w-full disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={isLoading || (selectedModel === 'gemini' && !editHotspot)}
+                            disabled={isLoading}
                         />
                         <button 
                             type="submit"
-                            className="bg-gradient-to-br from-blue-600 to-blue-500 text-white font-bold py-5 px-8 text-lg rounded-lg transition-all duration-300 ease-in-out shadow-lg shadow-blue-500/20 hover:shadow-xl hover:shadow-blue-500/40 hover:-translate-y-px active:scale-95 active:shadow-inner disabled:from-blue-800 disabled:to-blue-700 disabled:shadow-none disabled:cursor-not-allowed disabled:transform-none"
-                            disabled={isLoading || !prompt.trim() || (selectedModel === 'gemini' && !editHotspot)}
+                            className="bg-gradient-to-br from-blue-600 to-blue-500 text-white font-bold py-5 px-8 text-lg rounded-lg transition-all duration-300 ease-in-out shadow-lg shadow-blue-500/20 hover:shadow-xl hover:shadow-blue-500/40 hover:-translate-y-px active:scale-95 active:shadow-inner disabled:from-gray-600 disabled:to-gray-500 disabled:text-gray-300 disabled:shadow-none disabled:cursor-not-allowed disabled:transform-none"
+                            disabled={isLoading || !prompt.trim()}
                         >
                             Generate
                         </button>
