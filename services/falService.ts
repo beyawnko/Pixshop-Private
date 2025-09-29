@@ -3,6 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
+/**
+ * Calls the Fal.ai Qwen Image Edit Plus API
+ * @param {string} imageUrl - URL of the uploaded image from Fal.ai storage
+ * @param {string} prompt - The prompt to generate the image with
+ * @param {string} apiKey - Fal.ai API key for authentication
+ * @param {string} context - Context string for logging/debugging
+ * @returns {Promise<string>} URL of the generated image
+ */
 const callFalApi = async (
     imageUrl: string,
     prompt: string,
@@ -21,7 +29,11 @@ const callFalApi = async (
             image_urls: [imageUrl],
             prompt: prompt,
             output_format: 'png',
-            enable_safety_checker: true
+            enable_safety_checker: false,
+            acceleration: 'regular',
+            sync_mode: true,
+            num_images: 1,
+            image_size: 'square_hd'
         })
     });
 

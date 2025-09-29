@@ -140,8 +140,16 @@ const App: React.FC = () => {
           ? await generateEditedImage(currentImage, prompt, editHotspot!)
           : await generateEditedImageWithFal(currentImage, prompt, falApiKey);
 
-        const newImageFile = dataURLtoFile(editedImageUrl, `edited-${Date.now()}.png`);
-        addImageToHistory(newImageFile);
+        if (selectedModel === 'fal') {
+            const response = await fetch(editedImageUrl);
+            const blob = await response.blob();
+            const newImageFile = new File([blob], `edited-${Date.now()}.png`, { type: 'image/png' });
+            addImageToHistory(newImageFile);
+        } else {
+            const newImageFile = dataURLtoFile(editedImageUrl, `edited-${Date.now()}.png`);
+            addImageToHistory(newImageFile);
+        }
+        
         setEditHotspot(null);
         setDisplayHotspot(null);
     } catch (err) {
@@ -172,7 +180,14 @@ const App: React.FC = () => {
           ? await generateFilteredImage(currentImage, filterPrompt)
           : await generateFilteredImageWithFal(currentImage, filterPrompt, falApiKey);
         
-        const newImageFile = dataURLtoFile(filteredImageUrl, `filtered-${Date.now()}.png`);
+        let newImageFile: File;
+        if (selectedModel === 'fal') {
+            const response = await fetch(filteredImageUrl);
+            const blob = await response.blob();
+            newImageFile = new File([blob], `filtered-${Date.now()}.png`, { type: 'image/png' });
+        } else {
+            newImageFile = dataURLtoFile(filteredImageUrl, `filtered-${Date.now()}.png`);
+        }
         addImageToHistory(newImageFile);
     } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
@@ -202,7 +217,14 @@ const App: React.FC = () => {
           ? await generateAdjustedImage(currentImage, adjustmentPrompt)
           : await generateAdjustedImageWithFal(currentImage, adjustmentPrompt, falApiKey);
         
-        const newImageFile = dataURLtoFile(adjustedImageUrl, `adjusted-${Date.now()}.png`);
+        let newImageFile: File;
+        if (selectedModel === 'fal') {
+            const response = await fetch(adjustedImageUrl);
+            const blob = await response.blob();
+            newImageFile = new File([blob], `adjusted-${Date.now()}.png`, { type: 'image/png' });
+        } else {
+            newImageFile = dataURLtoFile(adjustedImageUrl, `adjusted-${Date.now()}.png`);
+        }
         addImageToHistory(newImageFile);
     } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
