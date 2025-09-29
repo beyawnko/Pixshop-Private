@@ -3,49 +3,46 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-// Helper to convert File to data URL
-const fileToDataUrl = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = error => reject(error);
-    });
-};
+import * as fal from '@fal-ai/client';
 
 const callFalApi = async (
-    imageUrl: string,
+    imageFile: File,
     prompt: string,
     apiKey: string,
     context: string
 ): Promise<string> => {
     console.log(`Calling Fal.ai for ${context} with prompt: ${prompt}`);
-    
-    const response = await fetch('https://fal.run/fal-ai/qwen-image-edit-plus', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Key ${apiKey}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            image_urls: [imageUrl],
-            prompt: prompt,
-        })
-    });
 
-    if (!response.ok) {
-        const errorBody = await response.text();
-        console.error(`Fal.ai API error for ${context}:`, errorBody);
-        throw new Error(`Fal.ai API request failed with status ${response.status}: ${errorBody}`);
-    }
+    try {
+        // Upload image using the official Fal.ai client SDK
+        const uploadedFile = await fal.upload(imageFile, {
+            key: apiKey,
+        });
+        
+        const imageUrl = uploadedFile.url;
+        
+        // Call the Qwen model using the official Fal.ai client SDK
+        const result: any = await fal.run('fal-ai/qwen-image-edit-plus', {
+            key: apiKey,
+            input: {
+                image_urls: [imageUrl],
+                prompt: prompt,
+                output_format: 'png',
+                enable_safety_checker: false
+            }
+        });
 
-    const result = await response.json();
-
-    if (result.images && result.images.length > 0 && result.images[0].url) {
-        return result.images[0].url;
-    } else {
-        console.error(`Fal.ai API response did not contain an image for ${context}.`, { result });
-        throw new Error(`The Fal.ai model did not return an image for the ${context}.`);
+        if (result.images && result.images.length > 0 && result.images[0].url) {
+            return result.images[0].url;
+        } else {
+            console.error(`Fal.ai API response did not contain an image for ${context}.`, { result });
+            throw new Error(`The Fal.ai model did not return an image for the ${context}.`);
+        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'An unknown error occurred with Fal.ai';
+        // Sanitize API key from any error message
+        console.error(`Fal.ai process failed for ${context}:`, message.replace(apiKey, '[REDACTED]'));
+        throw new Error(message.replace(apiKey, '[REDACTED]'));
     }
 };
 
@@ -54,8 +51,7 @@ export const generateEditedImageWithFal = async (
     userPrompt: string,
     apiKey: string
 ): Promise<string> => {
-    const imageUrl = await fileToDataUrl(originalImage);
-    return callFalApi(imageUrl, userPrompt, apiKey, 'edit');
+    return callFalApi(originalImage, userPrompt, apiKey, 'edit');
 };
 
 export const generateFilteredImageWithFal = async (
@@ -63,9 +59,8 @@ export const generateFilteredImageWithFal = async (
     filterPrompt: string,
     apiKey: string,
 ): Promise<string> => {
-    const imageUrl = await fileToDataUrl(originalImage);
     const prompt = `Apply a stylistic filter to the entire image based on this request: "${filterPrompt}". Do not change the composition or content, only apply the style.`;
-    return callFalApi(imageUrl, prompt, apiKey, 'filter');
+    return callFalApi(originalImage, prompt, apiKey, 'filter');
 };
 
 export const generateAdjustedImageWithFal = async (
@@ -73,7 +68,6 @@ export const generateAdjustedImageWithFal = async (
     adjustmentPrompt: string,
     apiKey: string,
 ): Promise<string> => {
-    const imageUrl = await fileToDataUrl(originalImage);
     const prompt = `Perform a natural, global adjustment to the entire image based on this request: "${adjustmentPrompt}".`;
-    return callFalApi(imageUrl, prompt, apiKey, 'adjustment');
+    return callFalApi(originalImage, prompt, apiKey, 'adjustment');
 };
