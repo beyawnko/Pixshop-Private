@@ -16,6 +16,7 @@ import { CropPanel } from './components/CropPanel';
 import { UndoIcon, RedoIcon, EyeIcon, PlusIcon, CloseIcon, UploadIcon } from './components/icons';
 import StartScreen from './components/StartScreen';
 import { ApiKeyModal } from './components/ApiKeyModal';
+import { QwenPromptGuide, GeminiPromptGuide } from './components/ToolOptions';
 
 // Helper to convert a data URL string to a File object
 const dataURLtoFile = (dataurl: string, filename: string): File => {
@@ -54,7 +55,9 @@ const App: React.FC = () => {
   const [history, setHistory] = useState<File[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
-  const [prompt, setPrompt] = useState<string>('');
+  const [customPrompt, setCustomPrompt] = useState<string>('');
+  const [selectedQwenPrompts, setSelectedQwenPrompts] = useState<string[]>([]);
+  const [selectedGeminiPrompts, setSelectedGeminiPrompts] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [editHotspot, setEditHotspot] = useState<{ x: number, y: number } | null>(null);
@@ -152,6 +155,9 @@ const App: React.FC = () => {
     setActiveTab('retouch');
     setCrop(undefined);
     setCompletedCrop(undefined);
+    setCustomPrompt('');
+    setSelectedQwenPrompts([]);
+    setSelectedGeminiPrompts([]);
   }, []);
 
   const handleGenerate = useCallback(async () => {
@@ -160,19 +166,27 @@ const App: React.FC = () => {
       return;
     }
     
-    if (!prompt.trim()) {
-        setError('Please enter a description for your edit.');
-        return;
-    }
+    const finalQwenPrompt = [...selectedQwenPrompts, customPrompt.trim()].filter(Boolean).join(', ');
+    const finalGeminiPrompt = [...selectedGeminiPrompts, customPrompt.trim()].filter(Boolean).join('. ');
 
-    if (selectedModel === 'gemini' && !editHotspot) {
-        setError('Please click on the image to select an area to edit.');
-        return;
-    }
-    
-    if (selectedModel === 'fal' && !falApiKey) {
-      setIsApiKeyModalOpen(true);
-      return;
+    if (selectedModel === 'fal') {
+        if (!finalQwenPrompt) {
+            setError('Please select a quick prompt or enter a description for your edit.');
+            return;
+        }
+        if (!falApiKey) {
+            setIsApiKeyModalOpen(true);
+            return;
+        }
+    } else { // gemini
+        if (!finalGeminiPrompt) {
+            setError('Please select a quick prompt or enter a description for your edit.');
+            return;
+        }
+        if (!editHotspot) {
+            setError('Please click on the image to select an area to edit.');
+            return;
+        }
     }
 
     setIsLoading(true);
@@ -180,8 +194,8 @@ const App: React.FC = () => {
     
     try {
         const editedImageUrl = selectedModel === 'gemini'
-          ? await generateEditedImage(currentImage, prompt, editHotspot!)
-          : await generateEditedImageWithFal(currentImage, referenceImage, prompt, falApiKey, falImageSize);
+          ? await generateEditedImage(currentImage, finalGeminiPrompt, editHotspot!)
+          : await generateEditedImageWithFal(currentImage, referenceImage, finalQwenPrompt, falApiKey, falImageSize);
 
         if (selectedModel === 'fal') {
             const response = await fetch(editedImageUrl);
@@ -202,7 +216,7 @@ const App: React.FC = () => {
     } finally {
         setIsLoading(false);
     }
-  }, [currentImage, prompt, editHotspot, addImageToHistory, selectedModel, falApiKey, referenceImage, falImageSize]);
+  }, [currentImage, customPrompt, selectedQwenPrompts, selectedGeminiPrompts, editHotspot, addImageToHistory, selectedModel, falApiKey, referenceImage, falImageSize]);
   
   const handleApplyFilter = useCallback(async (filterPrompt: string) => {
     if (!currentImage) {
@@ -329,6 +343,9 @@ const App: React.FC = () => {
       setEditHotspot(null);
       setDisplayHotspot(null);
       setReferenceImage(null);
+      setCustomPrompt('');
+      setSelectedQwenPrompts([]);
+      setSelectedGeminiPrompts([]);
     }
   }, [canUndo, historyIndex]);
   
@@ -338,6 +355,9 @@ const App: React.FC = () => {
       setEditHotspot(null);
       setDisplayHotspot(null);
       setReferenceImage(null);
+      setCustomPrompt('');
+      setSelectedQwenPrompts([]);
+      setSelectedGeminiPrompts([]);
     }
   }, [canRedo, historyIndex]);
 
@@ -348,6 +368,9 @@ const App: React.FC = () => {
       setEditHotspot(null);
       setDisplayHotspot(null);
       setReferenceImage(null);
+      setCustomPrompt('');
+      setSelectedQwenPrompts([]);
+      setSelectedGeminiPrompts([]);
     }
   }, [history]);
 
@@ -355,7 +378,9 @@ const App: React.FC = () => {
       setHistory([]);
       setHistoryIndex(-1);
       setError(null);
-      setPrompt('');
+      setCustomPrompt('');
+      setSelectedQwenPrompts([]);
+      setSelectedGeminiPrompts([]);
       setEditHotspot(null);
       setDisplayHotspot(null);
       setReferenceImage(null);
@@ -396,6 +421,22 @@ const App: React.FC = () => {
   const handleRemoveReferenceImage = () => {
       setReferenceImage(null);
   };
+  
+  const handleQwenPromptToggle = useCallback((promptToToggle: string) => {
+    setSelectedQwenPrompts(prev =>
+        prev.includes(promptToToggle)
+            ? prev.filter(p => p !== promptToToggle)
+            : [...prev, promptToToggle]
+    );
+  }, []);
+
+  const handleGeminiPromptToggle = useCallback((promptToToggle: string) => {
+    setSelectedGeminiPrompts(prev =>
+        prev.includes(promptToToggle)
+            ? prev.filter(p => p !== promptToToggle)
+            : [...prev, promptToToggle]
+    );
+  }, []);
 
   const handleImageClick = (e: React.MouseEvent<HTMLImageElement>) => {
     if (activeTab !== 'retouch' || selectedModel === 'fal') return;
@@ -472,6 +513,11 @@ const App: React.FC = () => {
       />
     );
 
+    const isGenerateDisabled = isLoading || (
+        selectedModel === 'fal'
+            ? selectedQwenPrompts.length === 0 && !customPrompt.trim()
+            : (selectedGeminiPrompts.length === 0 && !customPrompt.trim())
+    );
 
     return (
       <div className="w-full max-w-4xl mx-auto flex flex-col items-center gap-6 animate-fade-in">
@@ -609,27 +655,29 @@ const App: React.FC = () => {
                 <div className="flex flex-col items-center gap-4">
                     <p className="text-md text-gray-400">
                       {selectedModel === 'gemini' 
-                        ? (editHotspot ? 'Great! Now describe your localized edit below.' : 'Click an area on the image to make a precise edit.')
-                        : 'Describe the edit. You can add a reference image for style or content transfer.'
+                        ? (editHotspot ? 'Great! Now select a quick edit, or describe your own below.' : 'Click an area on the image to make a precise edit.')
+                        : 'Select one or more quick edits, or describe your own below.'
                       }
                     </p>
+                    {selectedModel === 'fal' && <QwenPromptGuide selectedPrompts={selectedQwenPrompts} onPromptToggle={handleQwenPromptToggle} />}
+                    {selectedModel === 'gemini' && <GeminiPromptGuide selectedPrompts={selectedGeminiPrompts} onPromptToggle={handleGeminiPromptToggle} />}
                     <form onSubmit={(e) => { e.preventDefault(); handleGenerate(); }} className="w-full flex items-center gap-2">
                         <input
                             type="text"
-                            value={prompt}
-                            onChange={(e) => setPrompt(e.target.value)}
+                            value={customPrompt}
+                            onChange={(e) => setCustomPrompt(e.target.value)}
                             placeholder={
                               selectedModel === 'gemini'
-                                ? (editHotspot ? "e.g., 'change my shirt color to blue'" : "Click a point, then describe your edit")
-                                : "e.g., 'make the photo black and white'"
+                                ? (editHotspot ? "Add custom details or combine prompts..." : "Click a point, then describe your edit")
+                                : "Add custom details or combine with selected prompts..."
                             }
                             className="flex-grow bg-gray-800 border border-gray-700 text-gray-200 rounded-lg p-5 text-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition w-full disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={isLoading}
+                            disabled={isLoading || (selectedModel === 'gemini' && !editHotspot)}
                         />
                         <button 
                             type="submit"
                             className="bg-gradient-to-br from-blue-600 to-blue-500 text-white font-bold py-5 px-8 text-lg rounded-lg transition-all duration-300 ease-in-out shadow-lg shadow-blue-500/20 hover:shadow-xl hover:shadow-blue-500/40 hover:-translate-y-px active:scale-95 active:shadow-inner disabled:from-gray-600 disabled:to-gray-500 disabled:text-gray-300 disabled:shadow-none disabled:cursor-not-allowed disabled:transform-none"
-                            disabled={isLoading || !prompt.trim()}
+                            disabled={isGenerateDisabled}
                         >
                             Generate
                         </button>

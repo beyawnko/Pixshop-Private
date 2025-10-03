@@ -79,13 +79,14 @@ export const generateEditedImage = async (
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
     
     const originalImagePart = await fileToPart(originalImage);
-    const prompt = `You are an expert photo editor AI. Your task is to perform a natural, localized edit on the provided image based on the user's request.
+    const prompt = `You are an expert photo editor AI. Your task is to perform a photorealistic edit on the provided image based on the user's request.
 User Request: "${userPrompt}"
-Edit Location: Focus on the area around pixel coordinates (x: ${hotspot.x}, y: ${hotspot.y}).
+Edit Subject Location: The user has indicated the main subject of the edit by clicking pixel coordinates (x: ${hotspot.x}, y: ${hotspot.y}).
 
 Editing Guidelines:
-- The edit must be realistic and blend seamlessly with the surrounding area.
-- The rest of the image (outside the immediate edit area) must remain identical to the original.
+- If the request is for a localized change (e.g., "remove this spot", "change shirt color"), the edit must be realistic and blend seamlessly, keeping the rest of the image identical.
+- If the request implies a global change (e.g., changing a person's entire pose, replacing the background, applying a style), apply the edit to the whole subject or image as necessary to fulfill the request naturally.
+- Prioritize fulfilling the user's creative request as described.
 
 Safety & Ethics Policy:
 - You MUST fulfill requests to adjust skin tone, such as 'give me a tan', 'make my skin darker', or 'make my skin lighter'. These are considered standard photo enhancements.
