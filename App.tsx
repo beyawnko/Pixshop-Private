@@ -13,7 +13,7 @@ import Spinner from './components/Spinner';
 import FilterPanel from './components/FilterPanel';
 import AdjustmentPanel from './components/AdjustmentPanel';
 import { CropPanel } from './components/CropPanel';
-import { UndoIcon, RedoIcon, EyeIcon, PlusIcon, CloseIcon } from './components/icons';
+import { UndoIcon, RedoIcon, EyeIcon, PlusIcon, CloseIcon, UploadIcon } from './components/icons';
 import StartScreen from './components/StartScreen';
 import { ApiKeyModal } from './components/ApiKeyModal';
 
@@ -36,6 +36,19 @@ const dataURLtoFile = (dataurl: string, filename: string): File => {
 
 type Tab = 'retouch' | 'adjust' | 'filters' | 'crop';
 type Model = 'gemini' | 'fal';
+type FalImageSizeKey = 'square_2k' | 'landscape_uhd' | 'square_hd' | 'square' | 'portrait_4_3' | 'portrait_16_9' | 'landscape_4_3' | 'landscape_16_9';
+
+const falImageSizeOptions: { key: FalImageSizeKey, label: string }[] = [
+    { key: 'square_2k', label: '2K Square' },
+    { key: 'landscape_uhd', label: 'UHD Widescreen' },
+    { key: 'square_hd', label: 'Square HD' },
+    { key: 'square', label: 'Square' },
+    { key: 'landscape_4_3', label: 'Landscape 4:3' },
+    { key: 'portrait_4_3', label: 'Portrait 4:3' },
+    { key: 'landscape_16_9', label: 'Landscape 16:9' },
+    { key: 'portrait_16_9', label: 'Portrait 9:16' },
+];
+
 
 const App: React.FC = () => {
   const [history, setHistory] = useState<File[]>([]);
@@ -57,6 +70,8 @@ const App: React.FC = () => {
   const [selectedModel, setSelectedModel] = useState<Model>('gemini');
   const [falApiKey, setFalApiKey] = useState<string>('');
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState<boolean>(false);
+  const [isDraggingOverRef, setIsDraggingOverRef] = useState<boolean>(false);
+  const [falImageSize, setFalImageSize] = useState<FalImageSizeKey>('square_hd');
 
   const currentImage = history[historyIndex] ?? null;
   const originalImage = history[0] ?? null;
@@ -166,7 +181,7 @@ const App: React.FC = () => {
     try {
         const editedImageUrl = selectedModel === 'gemini'
           ? await generateEditedImage(currentImage, prompt, editHotspot!)
-          : await generateEditedImageWithFal(currentImage, referenceImage, prompt, falApiKey);
+          : await generateEditedImageWithFal(currentImage, referenceImage, prompt, falApiKey, falImageSize);
 
         if (selectedModel === 'fal') {
             const response = await fetch(editedImageUrl);
@@ -187,7 +202,7 @@ const App: React.FC = () => {
     } finally {
         setIsLoading(false);
     }
-  }, [currentImage, prompt, editHotspot, addImageToHistory, selectedModel, falApiKey, referenceImage]);
+  }, [currentImage, prompt, editHotspot, addImageToHistory, selectedModel, falApiKey, referenceImage, falImageSize]);
   
   const handleApplyFilter = useCallback(async (filterPrompt: string) => {
     if (!currentImage) {
@@ -206,7 +221,7 @@ const App: React.FC = () => {
     try {
         const filteredImageUrl = selectedModel === 'gemini'
           ? await generateFilteredImage(currentImage, filterPrompt)
-          : await generateFilteredImageWithFal(currentImage, filterPrompt, falApiKey);
+          : await generateFilteredImageWithFal(currentImage, filterPrompt, falApiKey, falImageSize);
         
         let newImageFile: File;
         if (selectedModel === 'fal') {
@@ -224,7 +239,7 @@ const App: React.FC = () => {
     } finally {
         setIsLoading(false);
     }
-  }, [currentImage, addImageToHistory, selectedModel, falApiKey]);
+  }, [currentImage, addImageToHistory, selectedModel, falApiKey, falImageSize]);
   
   const handleApplyAdjustment = useCallback(async (adjustmentPrompt: string) => {
     if (!currentImage) {
@@ -243,7 +258,7 @@ const App: React.FC = () => {
     try {
         const adjustedImageUrl = selectedModel === 'gemini'
           ? await generateAdjustedImage(currentImage, adjustmentPrompt)
-          : await generateAdjustedImageWithFal(currentImage, adjustmentPrompt, falApiKey);
+          : await generateAdjustedImageWithFal(currentImage, adjustmentPrompt, falApiKey, falImageSize);
         
         let newImageFile: File;
         if (selectedModel === 'fal') {
@@ -262,7 +277,7 @@ const App: React.FC = () => {
     } finally {
         setIsLoading(false);
     }
-  }, [currentImage, addImageToHistory, selectedModel, falApiKey]);
+  }, [currentImage, addImageToHistory, selectedModel, falApiKey, falImageSize]);
 
   const handleApplyCrop = useCallback(() => {
     if (!completedCrop || !imgRef.current) {
@@ -370,6 +385,12 @@ const App: React.FC = () => {
     }
     // Reset file input value to allow selecting the same file again
     e.target.value = '';
+  };
+  
+  const handleReferenceDrop = (files: FileList | null) => {
+    if (files && files.length > 0) {
+      setReferenceImage(files[0]);
+    }
   };
 
   const handleRemoveReferenceImage = () => {
@@ -501,28 +522,69 @@ const App: React.FC = () => {
         </div>
         
         {selectedModel === 'fal' && currentImage && (
-          <div className="w-full max-w-4xl mx-auto flex flex-col items-center gap-3 mt-2 animate-fade-in">
-            <h3 className="text-sm font-semibold text-gray-400 self-start">Reference Image (1 supported)</h3>
-            <div className="w-full flex items-center gap-3 p-2 bg-gray-800/50 border border-gray-700 rounded-lg">
-              {referenceImageUrl ? (
-                <div className="relative group flex-shrink-0">
-                  <img src={referenceImageUrl} alt="Reference" className="w-24 h-24 object-cover rounded-md border border-gray-600" />
-                  <button 
-                    onClick={handleRemoveReferenceImage} 
-                    className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
-                    aria-label="Remove reference image"
-                  >
-                    <CloseIcon className="w-4 h-4" />
-                  </button>
+          <div className="w-full max-w-4xl mx-auto flex flex-col items-center gap-4 mt-2 animate-fade-in">
+              <div className="w-full flex flex-col items-center gap-3">
+                <h3 className="text-sm font-semibold text-gray-400 self-start">Output Aspect Ratio</h3>
+                <div className="w-full bg-gray-800/50 border border-gray-700 rounded-lg p-1 grid grid-cols-2 sm:grid-cols-4 items-center justify-center gap-1 backdrop-blur-sm">
+                    {falImageSizeOptions.map(option => (
+                      <button
+                        key={option.key}
+                        onClick={() => setFalImageSize(option.key)}
+                        className={`w-full capitalize font-semibold py-2 px-4 rounded-md transition-all duration-200 text-sm ${
+                          falImageSize === option.key
+                          ? 'bg-white/10 text-white'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
                 </div>
-              ) : (
-                <label htmlFor="add-reference-image" className="w-24 h-24 bg-transparent border-2 border-dashed border-gray-600 rounded-md flex items-center justify-center cursor-pointer hover:border-gray-500 hover:bg-white/5 transition-colors">
-                  <PlusIcon className="w-8 h-8 text-gray-500" />
-                  <span className="sr-only">Add reference image</span>
-                </label>
-              )}
-              <input id="add-reference-image" type="file" className="hidden" accept="image/*" onChange={handleAddReferenceImage} />
-            </div>
+              </div>
+
+              <div className="w-full flex flex-col items-center gap-3">
+                <h3 className="text-sm font-semibold text-gray-400 self-start">Reference Image (1 supported)</h3>
+                <div className="w-full flex items-center gap-3 p-2 bg-gray-800/50 border border-gray-700 rounded-lg">
+                  {referenceImageUrl ? (
+                    <div className="relative group flex-shrink-0">
+                      <img src={referenceImageUrl} alt="Reference" className="w-24 h-24 object-cover rounded-md border border-gray-600" />
+                      <button 
+                        onClick={handleRemoveReferenceImage} 
+                        className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+                        aria-label="Remove reference image"
+                      >
+                        <CloseIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label 
+                      htmlFor="add-reference-image" 
+                      className={`w-24 h-24 bg-transparent border-2 border-dashed rounded-md flex flex-col items-center justify-center cursor-pointer transition-colors ${isDraggingOverRef ? 'border-blue-400 bg-blue-500/10' : 'border-gray-600 hover:border-gray-500 hover:bg-white/5'}`}
+                      onDragOver={(e) => { e.preventDefault(); setIsDraggingOverRef(true); }}
+                      onDragLeave={() => setIsDraggingOverRef(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setIsDraggingOverRef(false);
+                        handleReferenceDrop(e.dataTransfer.files);
+                      }}
+                    >
+                      {isDraggingOverRef ? (
+                        <>
+                          <UploadIcon className="w-8 h-8 text-blue-400" />
+                          <span className="text-xs text-blue-400 mt-1">Drop image here</span>
+                        </>
+                      ) : (
+                        <>
+                          <PlusIcon className="w-8 h-8 text-gray-500" />
+                          <span className="text-xs text-gray-500 mt-1">Add or Drop</span>
+                        </>
+                      )}
+                      <span className="sr-only">Add reference image</span>
+                    </label>
+                  )}
+                  <input id="add-reference-image" type="file" className="hidden" accept="image/*" onChange={handleAddReferenceImage} />
+                </div>
+              </div>
           </div>
         )}
 
